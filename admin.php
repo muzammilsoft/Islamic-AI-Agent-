@@ -1,4 +1,5 @@
 <?php
+require_once 'error_handler.php';
 session_start();
 require_once 'config.php';
 
@@ -127,6 +128,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php endforeach; ?>
                     </ul>
                 <?php endif; ?>
+            </div>
+
+            <div class="section">
+                <h2>سجل أخطاء النظام</h2>
+                <?php
+                $logFilePath = __DIR__ . '/logs/app_errors.log';
+                if (file_exists($logFilePath)) {
+                    $logContent = htmlspecialchars(file_get_contents($logFilePath));
+                    $lines = explode("\n", trim($logContent));
+                    $reversedLines = array_reverse($lines);
+                    echo "<pre>" . implode("\n", $reversedLines) . "</pre>";
+                } else {
+                    echo "<p>لم يتم تسجيل أي أخطاء.</p>";
+                }
+                ?>
             </div>
 
             <div class="section">

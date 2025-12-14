@@ -9,6 +9,7 @@
 // We are in simulation mode
 define('SIMULATING', true);
 
+require_once 'error_handler.php';
 require_once 'bot_logic.php';
 
 // Check if the correct number of arguments is provided

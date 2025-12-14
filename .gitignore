@@ -1,0 +1,9 @@
+# Ignore generated artifacts and sensitive files
+*.zip
+*.tar.gz
+
+# Ignore log files
+/logs/
+
+# Ignore local configuration files (if any)
+# config.local.php

@@ -1,6 +1,7 @@
 <?php
 // Main webhook file
 
+require_once 'error_handler.php';
 require_once 'config.php';
 require_once 'bot_logic.php';
 

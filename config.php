@@ -25,3 +25,8 @@ define('ADMIN_PASSWORD', 'your_secret_password');
 // --- AI Provider ---
 // The API token for Pollinations AI.
 define('POLLINATIONS_API_TOKEN', 'uXe8DFSTD9BLByKh');
+
+
+// --- Jules's Error Log Access ---
+// A unique token for Jules to access the error log via errors.php
+define('JULES_ACCESS_TOKEN', 'jules_dev_access_token_5a7b9c2d8e1f3g4h');

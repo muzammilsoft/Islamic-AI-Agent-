@@ -3,6 +3,7 @@
 
 define('SIMULATING', true); // Set to true for manual testing, false for production cron
 
+require_once 'error_handler.php';
 require_once 'config.php';
 require_once 'api_handler.php';
 require_once 'user_manager.php'; // Defines USER_DATA_DIR
