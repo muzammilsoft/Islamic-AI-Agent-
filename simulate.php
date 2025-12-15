@@ -5,6 +5,7 @@
 // php simulate.php <PSID> "<MESSAGE_TEXT>"
 // Example: php simulate.php 12345 "Hello world"
 // Example for quick reply payload: php simulate.php 12345 "PRAYER_TIMES" --quick-reply
+// Example for persistent menu postback: php simulate.php 12345 "DEVELOPER_INFO" --postback
 
 // We are in simulation mode
 define('SIMULATING', true);
@@ -21,7 +22,7 @@ if ($argc < 3) {
 // Get the PSID and message text from the command line arguments
 $senderId = $argv[1];
 $messageText = $argv[2];
-$isQuickReply = isset($argv[3]) && $argv[3] === '--quick-reply';
+$eventType = $argv[3] ?? '--text'; // --text, --quick-reply, --postback
 
 echo "Simulating message from PSID: $senderId\n";
 echo "Message: $messageText\n";
@@ -37,19 +38,29 @@ $messagingEvent = [
     'timestamp' => time() * 1000,
 ];
 
-if ($isQuickReply) {
-    $messagingEvent['message'] = [
-        'mid' => 'm_12345',
-        'text' => 'Quick Reply Text', // This text isn't usually used when a payload is present
-        'quick_reply' => [
+switch ($eventType) {
+    case '--postback':
+        $messagingEvent['postback'] = [
+            'mid' => 'm_12345',
+            'title' => 'Menu Title', // The text on the button
             'payload' => $messageText
-        ]
-    ];
-} else {
-     $messagingEvent['message'] = [
-        'mid' => 'm_12345',
-        'text' => $messageText
-    ];
+        ];
+        break;
+    case '--quick-reply':
+        $messagingEvent['message'] = [
+            'mid' => 'm_12345',
+            'text' => 'Quick Reply Text',
+            'quick_reply' => [
+                'payload' => $messageText
+            ]
+        ];
+        break;
+    default: // --text
+        $messagingEvent['message'] = [
+            'mid' => 'm_12345',
+            'text' => $messageText
+        ];
+        break;
 }
 
 

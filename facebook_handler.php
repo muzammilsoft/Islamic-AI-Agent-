@@ -123,3 +123,27 @@ function callSendAPI(array $messageData): void {
     }
     // error_log('Facebook API Response: ' . $response);
 }
+
+/**
+ * A wrapper for cURL calls to the Messenger Profile API.
+ * Used for setting things like the persistent menu.
+ * @param array $payload The data to be sent.
+ * @return string The response from the API.
+ */
+function callMessengerProfileAPI(array $payload): string {
+    $ch = curl_init('https://graph.facebook.com/v18.0/me/messenger_profile?access_token=' . PAGE_ACCESS_TOKEN);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($error) {
+        return "Error setting profile: " . $error;
+    }
+
+    return "API Response: " . $response;
+}
