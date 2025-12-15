@@ -13,11 +13,6 @@ const STATE_AWAITING_COMPLAINT = 'awaiting_complaint';
  * Main message handler.
  */
 function handleMessage(string $senderId, array $messagingEvent) {
-    $isNewUser = !file_exists(getUserFilePath($senderId));
-    if ($isNewUser) {
-        sendWelcomeMessage($senderId);
-    }
-
     $userProfile = getUserProfile($senderId);
 
     if ($userProfile['state'] === STATE_AWAITING_COMPLAINT) {
@@ -39,7 +34,13 @@ function handleMessage(string $senderId, array $messagingEvent) {
 
     // Handle regular text messages
     if (isset($messagingEvent['message']['text'])) {
-        handleAiInteraction($userProfile, $messagingEvent['message']['text']);
+        $messageText = $messagingEvent['message']['text'];
+        // Check if the message is an admin command
+        if (defined('ADMIN_PSID') && $senderId === ADMIN_PSID && strpos($messageText, '/') === 0) {
+            handleAdminCommand($senderId, $messageText);
+        } else {
+            handleAiInteraction($userProfile, $messageText);
+        }
     }
 }
 
@@ -129,6 +130,9 @@ function sendWelcomeMessage(string $senderId) {
  */
 function handlePayload(string $senderId, string $payload) {
     switch ($payload) {
+        case 'GET_STARTED_PAYLOAD':
+            sendWelcomeMessage($senderId);
+            break;
         case 'PRAYER_TIMES':
             handlePrayerTimesRequest($senderId);
             break;
@@ -236,6 +240,91 @@ function saveComplaint(string $psid, string $complaintText): void {
     $filePath = $complaintsDir . date('Y-m-d_H-i-s') . '_' . $psid . '.txt';
     $content = "User PSID: {$psid}\nTimestamp: " . date('c') . "\n\nComplaint:\n{$complaintText}";
     file_put_contents($filePath, $content);
+}
+
+/**
+ * Handles incoming admin commands.
+ */
+function handleAdminCommand(string $adminId, string $commandText) {
+    // Parse the command and arguments
+    $parts = explode(' ', $commandText, 2);
+    $command = $parts[0];
+    $args = $parts[1] ?? '';
+
+    switch ($command) {
+        case '/help':
+            $helpMessage = "🤖 Admin Commands:\n"
+                         . "/help - Show this help message.\n"
+                         . "/broadcast <message> - Send a message to all users.\n"
+                         . "/reset - Clear complaints, logs, and all user conversation histories.";
+            sendTextMessage($adminId, $helpMessage);
+            break;
+
+        case '/broadcast':
+            if (empty($args)) {
+                sendTextMessage($adminId, "⚠️ Usage: /broadcast <message>");
+                break;
+            }
+            $allUsers = getAllUserPsids();
+            $count = 0;
+            foreach ($allUsers as $psid) {
+                if ($psid !== $adminId) { // Don't send to the admin
+                    sendTextMessage($psid, $args);
+                    $count++;
+                }
+            }
+            sendTextMessage($adminId, "✅ Broadcast sent to {$count} users.");
+            break;
+
+        case '/reset':
+            // Clear complaints
+            $complaintsCleared = clearDirectory(__DIR__ . '/data/complaints/');
+
+            // Clear logs
+            $logsCleared = clearDirectory(__DIR__ . '/logs/');
+
+            // Clear conversation history for all users
+            $usersReset = 0;
+            $allUsers = getAllUserPsids();
+            foreach ($allUsers as $psid) {
+                $userProfile = getUserProfile($psid);
+                if (isset($userProfile['conversation_history'])) {
+                    $userProfile['conversation_history'] = [];
+                    updateUserProfile($psid, $userProfile);
+                    $usersReset++;
+                }
+            }
+
+            $resetMessage = "🔄 System Reset:\n"
+                          . "- Complaints cleared: {$complaintsCleared} files\n"
+                          . "- Logs cleared: {$logsCleared} files\n"
+                          . "- User conversation histories reset: {$usersReset} users";
+            sendTextMessage($adminId, $resetMessage);
+            break;
+
+        default:
+            sendTextMessage($adminId, "❓ Unknown command: '{$command}'. Type /help for a list of commands.");
+            break;
+    }
+}
+
+/**
+ * Helper function to delete all files in a directory.
+ * Returns the number of files deleted.
+ */
+function clearDirectory(string $dirPath): int {
+    if (!is_dir($dirPath)) {
+        return 0;
+    }
+    $files = glob($dirPath . '*');
+    $count = 0;
+    foreach ($files as $file) {
+        if (is_file($file)) {
+            unlink($file);
+            $count++;
+        }
+    }
+    return $count;
 }
 
 /**

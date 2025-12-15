@@ -5,8 +5,13 @@
 require_once 'config.php';
 require_once 'facebook_handler.php';
 
-function setupPersistentMenu() {
+function setupProfile() {
+    // This payload sets both the "Get Started" button and the Persistent Menu.
+    // Facebook requires the "Get Started" button to be present for the Persistent Menu to show.
     $payload = [
+        'get_started' => [
+            'payload' => 'GET_STARTED_PAYLOAD'
+        ],
         'persistent_menu' => [
             [
                 'locale' => 'default',
@@ -38,13 +43,11 @@ function setupPersistentMenu() {
     ];
 
     $response = callMessengerProfileAPI($payload);
-    echo "Setting Persistent Menu...\n";
+    echo "Setting up Get Started button and Persistent Menu...\n";
     echo $response . "\n";
 }
 
-// You can add other profile settings here in the future,
-// like a "Get Started" button.
 
 echo "--- iAi Profile Setup ---\n";
-setupPersistentMenu();
+setupProfile();
 echo "-------------------------\n";

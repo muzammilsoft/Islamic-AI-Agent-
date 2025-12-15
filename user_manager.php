@@ -57,3 +57,21 @@ function setUserState(string $psid, string $newState): void {
     $profile['state'] = $newState;
     updateUserProfile($psid, $profile);
 }
+
+/**
+ * Scans the user data directory and returns an array of all PSIDs.
+ * @return array A list of all user PSIDs.
+ */
+function getAllUserPsids(): array {
+    if (!is_dir(USER_DATA_DIR)) {
+        return [];
+    }
+    $files = scandir(USER_DATA_DIR);
+    $psids = [];
+    foreach ($files as $file) {
+        if (pathinfo($file, PATHINFO_EXTENSION) === 'json') {
+            $psids[] = pathinfo($file, PATHINFO_FILENAME);
+        }
+    }
+    return $psids;
+}
