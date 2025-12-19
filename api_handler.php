@@ -30,6 +30,56 @@ function getPrayerTimes(string $city, string $country): ?array {
     return null;
 }
 
+/**
+ * Fetches a relevant Quran verse based on a topic.
+ * NOTE: This is a simplified implementation. The API doesn't support direct topic search,
+ * so we map topics to specific sura/ayah numbers as a workaround.
+ *
+ * @param string $topic The topic to search for (e.g., "patience", "charity").
+ * @return array|null An associative array with the verse details or null on failure.
+ */
+function getQuranVerse(string $topic): ?array {
+    // Simple topic-to-verse mapping. Can be expanded.
+    $topicMap = [
+        'patience' => ['sura' => 2, 'ayah' => 153],
+        'charity' => ['sura' => 2, 'ayah' => 271],
+        'justice' => ['sura' => 4, 'ayah' => 135],
+        'prayer' => ['sura' => 29, 'ayah' => 45],
+        // Add more topics here
+    ];
+
+    $topicKey = strtolower(trim($topic));
+    if (!isset($topicMap[$topicKey])) {
+        return ['error' => "موضوع '{$topic}' غير مدعوم حاليًا."];
+    }
+
+    $sura = $topicMap[$topicKey]['sura'];
+    $ayah = $topicMap[$topicKey]['ayah'];
+
+    $url = "https://quranenc.com/api/v1/translation/aya/arabic_moyassar/{$sura}/{$ayah}";
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200) {
+        $data = json_decode($response, true);
+        if (isset($data['result'])) {
+            return [
+                'topic' => $topic,
+                'sura_number' => $data['result']['sura'],
+                'ayah_number' => $data['result']['aya'],
+                'arabic_text' => $data['result']['arabic_text'],
+                'translation' => $data['result']['translation'],
+            ];
+        }
+    }
+
+    return null;
+}
+
 
 /**
  * Calls the Pollinations AI to get a response.
@@ -38,21 +88,46 @@ function getPrayerTimes(string $city, string $country): ?array {
  * @param string $userMessage The latest message from the user.
  * @return string|null The AI's response text or null on failure.
  */
-function callPollinationsAI(array $conversationHistory, string $userMessage, ?array $toolResult = null): ?string {
+function callPollinationsAI(array $conversationHistory, string $userMessage, ?array $toolResults = null): ?string {
     $apiUrl = 'https://text.pollinations.ai/openai';
 
-    $systemPrompt = "أنت مساعد إسلامي ذكي اسمك iAi. مهمتك هي الإجابة على أسئلة المستخدمين المتعلقة بالإسلام.
-لديك أداة واحدة متاحة:
-1. `getPrayerTimes(city: string, country: string)`: للحصول على مواقيت الصلاة لمدينة ودولة معينة.
+    $systemPrompt = <<<PROMPT
+أنت مساعد إسلامي ذكي وقوي اسمك iAi. مهمتك هي مساعدة المستخدمين من خلال الإجابة على أسئلتهم وتقديم المعلومات الدينية الصحيحة.
 
-إذا طلب منك المستخدم مواقيت الصلاة، لا تجب مباشرة. بدلاً من ذلك، قم بالرد فقط بنص JSON لاستدعاء الأداة.
-مثال: إذا سأل المستخدم 'ما هي مواقيت الصلاة في الرياض؟'، يجب أن ترد بهذا الشكل بالضبط:
-`{\"tool\":\"getPrayerTimes\",\"city\":\"Riyadh\",\"country\":\"Saudi Arabia\"}`
+لديك مجموعة من الأدوات التي يمكنك استخدامها. يمكنك استخدام أداة واحدة أو أكثر في نفس الوقت حسب حاجة سؤال المستخدم.
 
-إذا لم تكن متأكداً من الدولة، حاول استنتاجها من السياق. لا تخترع معلومات.
-إذا كانت رسالة المستخدم لا تتعلق بمواقيت الصلاة، قم بالرد كنص عادي ومهذب.
+**-- الأدوات المتاحة --**
 
-إذا تم تزويدك بنتيجة أداة (tool result)، مهمتك هي صياغة إجابة ودية وواضحة للمستخدم بناءً على هذه البيانات.";
+1.  **`getPrayerTimes`**: للحصول على مواقيت الصلاة.
+    - **المعلمات**: `city` (string), `country` (string).
+    - **مثال**: `{"tool": "getPrayerTimes", "city": "Mecca", "country": "Saudi Arabia"}`
+
+2.  **`getQuranVerse`**: للبحث عن آيات قرآنية تتعلق بموضوع معين.
+    - **المعلمات**: `topic` (string, in English).
+    - **مثال**: `{"tool": "getQuranVerse", "topic": "patience"}`
+
+**-- قواعد الاستخدام --**
+
+1.  **تحليل السؤال**: حلل سؤال المستخدم بعناية. إذا كان السؤال يتطلب معلومات من أدواتك، يجب عليك استخدامها.
+2.  **صياغة الطلب**: يجب أن يكون ردك *فقط* على هيئة مصفوفة JSON تحتوي على كائن واحد أو أكثر من كائنات استدعاء الأدوات. **لا تضف أي نص آخر خارج مصفوفة JSON**.
+3.  **دائماً استخدم مصفوفة**: حتى لو كنت ستستخدم أداة واحدة فقط، يجب أن تضعها داخل مصفوفة `[]`.
+
+**-- أمثلة --**
+
+- **سؤال المستخدم**: "متى صلاة العصر في القاهرة؟"
+- **ردك**: `[{"tool": "getPrayerTimes", "city": "Cairo", "country": "Egypt"}]`
+
+- **سؤال المستخدم**: "أريد مواقيت الصلاة في دبي، وبعض الآيات عن فضل الصدقة"
+- **ردك**: `[{"tool": "getPrayerTimes", "city": "Dubai", "country": "UAE"}, {"tool": "getQuranVerse", "topic": "charity"}]`
+
+- **سؤال المستخدم**: "السلام عليكم"
+- **ردك**: (لا تستخدم أداة، أجب كنص عادي) "وعليكم السلام! كيف يمكنني مساعدتك اليوم؟"
+
+**-- مرحلة صياغة الإجابة --**
+
+عندما يتم تزويدك بـ `tool_results`، فهذا يعني أنك في المرحلة الثانية. مهمتك الآن هي صياغة إجابة نهائية، شاملة، ومنسقة للمستخدم باللغة العربية، بناءً على النتائج التي حصلت عليها. ادمج المعلومات من كل الأدوات في رد واحد متكامل.
+PROMPT;
+
 
     $messages = array_merge(
         [['role' => 'system', 'content' => $systemPrompt]],
@@ -60,9 +135,10 @@ function callPollinationsAI(array $conversationHistory, string $userMessage, ?ar
         [['role' => 'user', 'content' => $userMessage]]
     );
 
-    // If a tool result is provided, add it to the messages array for the AI to process.
-    if ($toolResult) {
-        $messages[] = ['role' => 'assistant', 'content' => json_encode(['tool_result' => $toolResult])];
+    // If tool results are provided, add them to the messages array for the AI to process.
+    if ($toolResults) {
+        // We wrap the results in a single assistant message.
+        $messages[] = ['role' => 'assistant', 'content' => json_encode(['tool_results' => $toolResults])];
     }
 
     $payload = [

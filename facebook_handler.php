@@ -4,16 +4,42 @@
 require_once 'config.php';
 
 /**
+ * Returns the standard set of quick reply buttons.
+ * @return array The array of quick reply objects.
+ */
+function getMainQuickReplies(): array {
+    return [
+        ['content_type' => 'text', 'title' => '◇ مواقيت الصلاة', 'payload' => 'PRAYER_TIMES_QR'],
+        ['content_type' => 'text', 'title' => '◇ الأذكار', 'payload' => 'GET_ADHIKAR_QR'],
+        ['content_type' => 'text', 'title' => '◇ إبلاغ عن خطأ', 'payload' => 'REPORT_ISSUE_QR'],
+        ['content_type' => 'text', 'title' => '◇ المطور', 'payload' => 'DEVELOPER_INFO_QR'],
+    ];
+}
+
+/**
  * Sends a text message to the user.
  * @param string $recipientId The PSID of the recipient.
  * @param string $messageText The text of the message to send.
  */
-function sendTextMessage(string $recipientId, string $messageText): void {
+function sendTextMessage(string $recipientId, string $messageText, ?array $quickReplies = null): void {
+    // If no specific quick replies are provided, use the main ones.
+    if ($quickReplies === null) {
+        $quickReplies = getMainQuickReplies();
+    }
+
     $messageData = [
         'recipient' => ['id' => $recipientId],
-        'message' => ['text' => $messageText],
+        'message' => [
+            'text' => $messageText,
+        ],
         'messaging_type' => 'RESPONSE'
     ];
+
+    // Only add quick_replies if the array is not empty.
+    if (!empty($quickReplies)) {
+        $messageData['message']['quick_replies'] = $quickReplies;
+    }
+
     callSendAPI($messageData);
 }
 
@@ -52,6 +78,8 @@ function sendImage(string $recipientId, string $imageUrl): void {
         ]
     ];
     callSendAPI($messageData);
+    // Follow up with a text message that includes the main quick replies.
+    sendTextMessage($recipientId, "👇", getMainQuickReplies());
 }
 
 /**
@@ -75,24 +103,20 @@ function sendButtonTemplate(string $recipientId, string $messageText, array $but
         ]
     ];
     callSendAPI($messageData);
+     // Follow up with a text message that includes the main quick replies.
+    sendTextMessage($recipientId, "👇", getMainQuickReplies());
 }
 
 /**
- * Sends a message with quick reply buttons.
+ * Sends a message with a custom set of quick reply buttons.
+ * The main quick replies will be appended automatically.
  * @param string $recipientId The PSID of the recipient.
  * @param string $messageText The text of the message to send.
- * @param array $quickReplies An array of quick reply button objects.
+ * @param array $customQuickReplies An array of custom quick reply button objects.
  */
-function sendQuickReply(string $recipientId, string $messageText, array $quickReplies): void {
-    $messageData = [
-        'recipient' => ['id' => $recipientId],
-        'message' => [
-            'text' => $messageText,
-            'quick_replies' => $quickReplies
-        ],
-        'messaging_type' => 'RESPONSE'
-    ];
-    callSendAPI($messageData);
+function sendQuickReply(string $recipientId, string $messageText, array $customQuickReplies): void {
+    $allReplies = array_merge($customQuickReplies, getMainQuickReplies());
+    sendTextMessage($recipientId, $messageText, $allReplies);
 }
 
 /**
@@ -130,9 +154,9 @@ function callSendAPI(array $messageData): void {
  * @param array $payload The data to be sent.
  * @return string The response from the API.
  */
-function callMessengerProfileAPI(array $payload): string {
+function callMessengerProfileAPI(array $payload, string $method = 'POST'): string {
     $ch = curl_init('https://graph.facebook.com/v18.0/me/messenger_profile?access_token=' . PAGE_ACCESS_TOKEN);
-    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

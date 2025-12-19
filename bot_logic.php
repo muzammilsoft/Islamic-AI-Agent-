@@ -58,35 +58,54 @@ function handleAiInteraction(array $userProfile, string $messageText) {
     $initialAiResponse = callPollinationsAI($conversationHistory, $messageText);
 
     if ($initialAiResponse) {
-        // Clean the AI response to extract potential JSON
-        $cleanedResponse = trim($initialAiResponse);
-        if (strpos($cleanedResponse, '```json') === 0) {
-            $cleanedResponse = str_replace(['```json', '```'], '', $cleanedResponse);
-        }
+        // Use regex to find a JSON array `[...]` within the response string.
+        preg_match('/\[\s*\{.*\}\s*\]/s', $initialAiResponse, $matches);
+        $jsonString = $matches[0] ?? null;
 
-        $toolCall = json_decode($cleanedResponse, true);
+        $toolCalls = $jsonString ? json_decode($jsonString, true) : null;
 
-        // 2. Check for a valid tool call
-        if (json_last_error() === JSON_ERROR_NONE && isset($toolCall['tool'])) {
-            if ($toolCall['tool'] === 'getPrayerTimes') {
-                $city = $toolCall['city'] ?? 'Default';
-                $country = $toolCall['country'] ?? 'Default';
+        // 2. Check for a valid array of tool calls
+        if ($toolCalls && json_last_error() === JSON_ERROR_NONE && is_array($toolCalls)) {
+            $toolResults = [];
+            foreach ($toolCalls as $toolCall) {
+                if (!isset($toolCall['tool'])) continue;
 
-                $prayerData = getPrayerTimes($city, $country);
-                $toolResult = $prayerData
-                    ? ['status' => 'success', 'data' => $prayerData['timings']]
-                    : ['status' => 'error', 'message' => "لم أتمكن من العثور على مواقيت الصلاة لـ {$city}, {$country}."];
+                $result = null;
+                switch ($toolCall['tool']) {
+                    case 'getPrayerTimes':
+                        $city = $toolCall['city'] ?? 'Default';
+                        $country = $toolCall['country'] ?? 'Default';
+                        $prayerData = getPrayerTimes($city, $country);
+                        $result = $prayerData
+                            ? ['tool' => 'getPrayerTimes', 'status' => 'success', 'data' => $prayerData]
+                            : ['tool' => 'getPrayerTimes', 'status' => 'error', 'message' => "لم أتمكن من العثور على مواقيت الصلاة لـ {$city}, {$country}."];
+                        break;
 
-                // 3. Second call to AI with tool result for final response
-                // We provide the original user message again for context.
-                $finalAiResponse = callPollinationsAI($conversationHistory, $messageText, $toolResult);
+                    case 'getQuranVerse':
+                        $topic = $toolCall['topic'] ?? 'islam';
+                        $verseData = getQuranVerse($topic);
+                         $result = $verseData
+                            ? ['tool' => 'getQuranVerse', 'status' => 'success', 'data' => $verseData]
+                            : ['tool' => 'getQuranVerse', 'status' => 'error', 'message' => "لم أتمكن من العثور على آية حول '{$topic}'."];
+                        break;
+                }
+                if ($result) {
+                    $toolResults[] = $result;
+                }
+            }
 
+            // 3. Second call to AI with all tool results for the final response
+            if (!empty($toolResults)) {
+                $finalAiResponse = callPollinationsAI($conversationHistory, $messageText, $toolResults);
                 if ($finalAiResponse) {
                     $finalResponseMessage = $finalAiResponse;
                 } else {
-                    $finalResponseMessage = "عذراً، واجهت مشكلة أثناء صياغة رد مواقيت الصلاة.";
+                    $finalResponseMessage = "عذراً، واجهت مشكلة أثناء تجميع الرد من الأدوات.";
                 }
+            } else {
+                 $finalResponseMessage = "عذراً، لم أتمكن من تنفيذ الأدوات المطلوبة.";
             }
+
         } else {
             // It's a direct text answer
             $finalResponseMessage = $initialAiResponse;
@@ -129,26 +148,34 @@ function sendWelcomeMessage(string $senderId) {
  * Handles incoming payloads from buttons and quick replies.
  */
 function handlePayload(string $senderId, string $payload) {
+    // These payloads now come from the permanent quick replies.
     switch ($payload) {
         case 'GET_STARTED_PAYLOAD':
             sendWelcomeMessage($senderId);
             break;
-        case 'PRAYER_TIMES':
+        case 'PRAYER_TIMES_QR':
             handlePrayerTimesRequest($senderId);
             break;
-        case 'GET_ADHIKAR':
-            $quickReplies = [['content_type' => 'text', 'title' => 'رجوع ❌', 'payload' => 'BACK_TO_AI']];
-            sendQuickReply($senderId, "هذا القسم قيد التطوير حالياً.", $quickReplies);
+        case 'GET_ADHIKAR_QR':
+            sendTextMessage($senderId, "هذا القسم قيد التطوير حالياً.");
             break;
-        case 'DEVELOPER_INFO':
+        case 'DEVELOPER_INFO_QR':
             handleDeveloperInfo($senderId);
             break;
-        case 'REPORT_ISSUE':
+        case 'REPORT_ISSUE_QR':
             setUserState($senderId, STATE_AWAITING_COMPLAINT);
-            sendTextMessage($senderId, "يسرنا سماع اقتراحاتك أو يؤسفنا وجود مشكلة. يرجى كتابة رسالة مفصلة حول المشكلة أو الخطأ الفقهي الذي تريد تصحيحه. سيتم إرسالها مباشرة إلى المطور.");
+            sendTextMessage($senderId, "يسرنا سماع اقتراحاتك أو يؤسفنا وجود مشكلة. يرجى كتابة رسالة مفصلة حول المشكلة أو الخطأ الفقهي الذي تريد تصحيحه. سيتم إرسالها مباشرة إلى المطور.", []); // No quick replies needed
             break;
+        // Keep old payloads for any lingering persistent menus
+        case 'PRAYER_TIMES':
+        case 'GET_ADHIKAR':
+        case 'DEVELOPER_INFO':
+        case 'REPORT_ISSUE':
+            handlePayload($senderId, $payload . '_QR'); // Redirect to new QR handlers
+            break;
+        // Payloads from specific flows
         case 'CHANGE_CITY':
-            sendTextMessage($senderId, "الرجاء إدخال اسم المدينة والدولة باللغة الإنجليزية، مفصولة بفاصلة. مثال: Khartoum, Sudan");
+            sendTextMessage($senderId, "الرجاء إدخال اسم المدينة والدولة باللغة الإنجليزية، مفصولة بفاصلة. مثال: Khartoum, Sudan", []);
             break;
         case 'BACK_TO_AI':
             sendTextMessage($senderId, "لقد عدنا إلى وضع المساعد الذكي. كيف يمكنني مساعدتك؟");

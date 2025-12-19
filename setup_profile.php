@@ -5,49 +5,30 @@
 require_once 'config.php';
 require_once 'facebook_handler.php';
 
-function setupProfile() {
-    // This payload sets both the "Get Started" button and the Persistent Menu.
-    // Facebook requires the "Get Started" button to be present for the Persistent Menu to show.
+function setupGetStartedButton() {
+    // This payload sets the "Get Started" button, which is the entry point for new users.
     $payload = [
         'get_started' => [
             'payload' => 'GET_STARTED_PAYLOAD'
-        ],
-        'persistent_menu' => [
-            [
-                'locale' => 'default',
-                'composer_input_disabled' => false, // Allow user to type
-                'call_to_actions' => [
-                    [
-                        'type' => 'postback',
-                        'title' => '◇ مواقيت الصلاة',
-                        'payload' => 'PRAYER_TIMES'
-                    ],
-                    [
-                        'type' => 'postback',
-                        'title' => '◇ الأذكار',
-                        'payload' => 'GET_ADHIKAR'
-                    ],
-                    [
-                        'type' => 'postback',
-                        'title' => '◇ إبلاغ عن خطأ',
-                        'payload' => 'REPORT_ISSUE'
-                    ],
-                    [
-                        'type' => 'postback',
-                        'title' => '◇ المطور',
-                        'payload' => 'DEVELOPER_INFO'
-                    ]
-                ]
-            ]
         ]
     ];
 
+    // To remove the persistent menu, we send a request with the fields to disable.
+    $deletePayload = [
+        'fields' => [
+            'persistent_menu'
+        ]
+    ];
+
+    echo "Setting up Get Started button...\n";
     $response = callMessengerProfileAPI($payload);
-    echo "Setting up Get Started button and Persistent Menu...\n";
     echo $response . "\n";
+
+    echo "Removing Persistent Menu (if it exists)...\n";
+    $deleteResponse = callMessengerProfileAPI($deletePayload, 'DELETE');
+    echo $deleteResponse . "\n";
 }
 
-
 echo "--- iAi Profile Setup ---\n";
-setupProfile();
+setupGetStartedButton();
 echo "-------------------------\n";
